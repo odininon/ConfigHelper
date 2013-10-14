@@ -15,7 +15,7 @@ let readFile (filePath:string) = seq {
         yield sr.ReadLine ()
 }
 
-let getFiles (filePath:string) = Directory.GetFiles(filePath, @"*.cfg", SearchOption.AllDirectories)
+let getFiles (filePath:string) = Directory.GetFiles(filePath, "*.cfg", SearchOption.AllDirectories)
 
 let seqFilter (f:('T -> bool)) (s:seq<'T>) = s |> Seq.filter f
 
@@ -39,8 +39,8 @@ let getValuesFromString (deli : char[] ) (s : string) =
 let getValuesCFG = getValuesFromString [| '=' |]
     
 let getDictionaryFromSeq sq =
-    let dict = Dictionary<string,string>()
-    sq |> Seq.iter (fun (x: string) -> dict.Add((getValuesCFG x).[0], (getValuesCFG x).[1]))
+    let dict = Dictionary<string,int>()
+    sq |> Seq.iter (fun (x: string) -> dict.Add((getValuesCFG x).[0], int ((getValuesCFG x).[1])))
     dict
     
 let rec getNameFromFile (f:string) = 
@@ -51,14 +51,12 @@ let rec getNameFromFile (f:string) =
 let printCollection targetSet =
     targetSet |> Seq.iter (fun x -> printfn "%O" x)
     targetSet |> Seq.length |> printfn "%d"  
-    
-    
+       
 let getDictionaryFromFile (f:string) =
-    let file = readFile f
-    let trimmedFile = trimSeq file
-    let blocks = getBlock "block" trimmedFile
-    let items = getBlock "item" trimmedFile
-    let modDict = new Dictionary<string,Dictionary<string,string>>()
+    let file = trimSeq (readFile f)
+    let blocks = getBlock "block" file
+    let items = getBlock "item" file
+    let modDict = new Dictionary<string,Dictionary<string,int>>()
     modDict.Add("blocks", getDictionaryFromSeq blocks)    
     modDict.Add("items", getDictionaryFromSeq items) 
     modDict
@@ -67,8 +65,9 @@ let getDictionaryFromFile (f:string) =
 let main args = 
 
     let files = getFiles "."
-    let modsDict = new Dictionary<string,Dictionary<string,Dictionary<string,string>>>()
+    let modsDict = new Dictionary<string,Dictionary<string,Dictionary<string,int>>>()
     files |> Seq.iter (fun x ->  modsDict.Add(getNameFromFile x, getDictionaryFromFile x))
 
+    printCollection modsDict.["BiblioCraft"].["items"]
     0
 
