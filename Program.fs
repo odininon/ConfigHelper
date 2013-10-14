@@ -15,6 +15,8 @@ let readFile (filePath:string) = seq {
         yield sr.ReadLine ()
 }
 
+let getFiles (filePath:string) = Directory.GetFiles(filePath, @"*.cfg", SearchOption.AllDirectories)
+
 let seqFilter (f:('T -> bool)) (s:seq<'T>) = s |> Seq.filter f
 
 let removeComments = seqFilter (fun (x:string) -> not (x.Contains "#"))
@@ -28,37 +30,45 @@ let getBlock (s:string) (sq:seq<string>) =
     let indexEnd = newsq |> Seq.findIndex (fun (x:string) -> x.Equals "}")
     newsq |> Seq.take indexEnd 
     
-let getValuesFromString (s : string) =
+let getValuesFromString (deli : char[] ) (s : string) =
     let index = s.IndexOf ":"
     let cleanString = s.Substring (index + 1) 
-    let values = cleanString.Split [| '=' |]
+    let values = cleanString.Split deli
     values
+    
+let getValuesCFG = getValuesFromString [| '=' |]
     
 let getDictionaryFromSeq sq =
     let dict = Dictionary<string,string>()
-    sq |> Seq.iter (fun (x: string) -> dict.Add((getValuesFromString x).[0], (getValuesFromString x).[1]))
+    sq |> Seq.iter (fun (x: string) -> dict.Add((getValuesCFG x).[0], (getValuesCFG x).[1]))
     dict
     
-let getNameFromFile (f:string) = (f.Split [| '.' |]).[0]
+let rec getNameFromFile (f:string) = 
+    match f.StartsWith "./" with
+    | true -> getNameFromFile (f.Substring 2)
+    | false -> (f.Split [|'.'|]).[0]
     
 let printCollection targetSet =
-    targetSet |> Seq.iter (fun x -> printf "%O" x)
+    targetSet |> Seq.iter (fun x -> printfn "%O" x)
+    targetSet |> Seq.length |> printfn "%d"  
+    
+    
+let getDictionaryFromFile (f:string) =
+    let file = readFile f
+    let trimmedFile = trimSeq file
+    let blocks = getBlock "block" trimmedFile
+    let items = getBlock "item" trimmedFile
+    let modDict = new Dictionary<string,Dictionary<string,string>>()
+    modDict.Add("blocks", getDictionaryFromSeq blocks)    
+    modDict.Add("items", getDictionaryFromSeq items) 
+    modDict
     
 [<EntryPoint>]
 let main args = 
-    let filename = "BiblioCraft.cfg"
-    let file = readFile filename
-    
-    let trimmedFile = trimSeq file
-        
-    let blocks = getBlock "block" trimmedFile
-    let items = getBlock "item" trimmedFile
-    
-    let modDict = new Dictionary<string,Dictionary<string,string>>()
-    modDict.Add((getNameFromFile filename) + " blocks", getDictionaryFromSeq blocks)    
-    modDict.Add((getNameFromFile filename) + " items", getDictionaryFromSeq items)    
-                            
-    printCollection modDict
+
+    let files = getFiles "."
+    let modsDict = new Dictionary<string,Dictionary<string,Dictionary<string,string>>>()
+    files |> Seq.iter (fun x ->  modsDict.Add(getNameFromFile x, getDictionaryFromFile x))
 
     0
 
