@@ -17,57 +17,85 @@ let readFile (filePath:string) = seq {
 
 let getFiles (filePath:string) = Directory.GetFiles(filePath, "*.cfg", SearchOption.AllDirectories)
 
-let seqFilter (f:('T -> bool)) (s:seq<'T>) = s |> Seq.filter f
+let seqFilter (f:('a -> bool)) (sq:'a seq) = sq |> Seq.filter f
 
 let removeComments = seqFilter (fun (x:string) -> not (x.Contains "#"))
 let removeEmptyLines = seqFilter (fun (x:string) -> not (x.Equals ""))
 
-let trimSeq (sequence:seq<string>) = sequence |> removeComments |> removeEmptyLines
+let trimLines (sq:string seq) = sq |> removeComments |> removeEmptyLines
 
-let getBlock (s:string) (sq:seq<string>) = 
-    let index = sq |> Seq.findIndex (fun (x:string) -> x.Equals (s + " {"))
+let cleanLines (l:string list) =
+    let filtered = l |> Seq.map (fun (s:string) -> s.Substring 4)
+    filtered 
+    |> Seq.toList
+
+let printCollection targetSet = targetSet |> Seq.iter (fun x -> printfn "%O" x)
+ 
+let getIndex index (s:string) =
+    let list = s.Split [|'='|]
+    list.[index]
+
+let getValue = getIndex 1 
+let getKey = getIndex 0   
+    
+let newBlock (i:int) (l:string list) =
+    l |> List.mapi (fun index s -> (getKey s) + "=" + string (i + index))
+
+let writeNewFile (file:string) (sq:string seq) =
+    use wr = new StreamWriter(file, false)
+    sq |> Seq.iter (fun l -> wr.WriteLine l)
+    wr.Close
+    
+let sortByValue (s1:string) (s2:string) = String.Compare(getValue s1, getValue s2)
+
+let getSorted (s:string) (sq:string seq) =
+    let index = sq |> Seq.findIndex (fun x -> x.Equals (s + " {"))
+
     let newsq = sq |> Seq.skip (index + 1)
-    let indexEnd = newsq |> Seq.findIndex (fun (x:string) -> x.Equals "}")
-    newsq |> Seq.take indexEnd 
+    let indexEnd = newsq |> Seq.findIndex (fun x -> x.Equals "}")
     
-let getValuesFromString (deli : char[] ) (s : string) =
-    let index = s.IndexOf ":"
-    let cleanString = s.Substring (index + 1) 
-    let values = cleanString.Split deli
-    values
+    let head = sq |> Seq.take (index + 1)
+    let newBlock = newsq |> Seq.take indexEnd |> Seq.toList |> cleanLines |> List.sortWith sortByValue |> Seq.map (fun s -> "    " + s)
+    let tail = sq |> Seq.skip (index + Seq.length newBlock + 1)
     
-let getValuesCFG = getValuesFromString [| '=' |]
-    
-let getDictionaryFromSeq sq =
-    let dict = Dictionary<string,int>()
-    sq |> Seq.iter (fun (x: string) -> dict.Add((getValuesCFG x).[0], int ((getValuesCFG x).[1])))
-    dict
-    
-let rec getNameFromFile (f:string) = 
-    match f.StartsWith "./" with
-    | true -> getNameFromFile (f.Substring 2)
-    | false -> (f.Split [|'.'|]).[0]
-    
-let printCollection targetSet =
-    targetSet |> Seq.iter (fun x -> printfn "%O" x)
-    targetSet |> Seq.length |> printfn "%d"  
-       
-let getDictionaryFromFile (f:string) =
-    let file = trimSeq (readFile f)
-    let blocks = getBlock "block" file
-    let items = getBlock "item" file
-    let modDict = new Dictionary<string,Dictionary<string,int>>()
-    modDict.Add("blocks", getDictionaryFromSeq blocks)    
-    modDict.Add("items", getDictionaryFromSeq items) 
-    modDict
-    
+    let headContent = newBlock |> Seq.append head
+    tail |> Seq.append headContent
+
+let hasBlock (s:string) (sq:string seq) =
+    let index = sq |> Seq.tryFindIndex (fun x -> x.Equals (s + " {"))
+    match index with
+    | None -> false
+    | _ -> true
+
+let sortFile (f:string) =
+    let file = trimLines(readFile f)
+    printfn "%O" f
+
+    let newFile =
+        let blockFile = 
+             match hasBlock "block" file with
+             | true -> getSorted "block" file
+             | false -> file
+            
+        let itemFile =
+             match hasBlock "item" blockFile with
+             | true -> getSorted "item" blockFile
+             | false -> blockFile
+        itemFile
+        
+                
+    printfn "%O" f
+//    File.WriteAllLines (f + ".tst", newFile)
+
+let sortFiles (f:string []) =
+    f |> Seq.iter (fun f -> sortFile f)
+
 [<EntryPoint>]
 let main args = 
+    if args.Length <> 1 then
+       failwith "Usage: program.exe directory"
 
-    let files = getFiles "."
-    let modsDict = new Dictionary<string,Dictionary<string,Dictionary<string,int>>>()
-    files |> Seq.iter (fun x ->  modsDict.Add(getNameFromFile x, getDictionaryFromFile x))
-
-    printCollection modsDict.["BiblioCraft"].["items"]
+    let files = getFiles args.[0]
+    sortFiles files
+    printfn "%d configs sorted and cleaned up" (Seq.length files)  
     0
-
